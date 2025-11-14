@@ -12,7 +12,7 @@ import requests # For Gemini
 import json # For Gemini
 
 # --- Configuration ---
-PORTFOLIO_FILE = 'תיק מניות.xlsx'
+PORTFOLIO_FILE = 'תיק מניות - שחף.xlsx'
 TICKER_COLUMN = 'טיקר'
 BUY_PRICE_COLUMN = 'מחיר עלות'
 SHARES_COLUMN = 'כמות מניות'
