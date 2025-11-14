@@ -12,7 +12,7 @@ import requests # For Gemini
 import json # For Gemini
 
 # --- Configuration ---
-PORTFOLIO_FILE = 'תיק מניות - שחף.xlsx'
+PORTFOLIO_FILE = 'תיק מניות.xlsx'
 TICKER_COLUMN = 'טיקר'
 BUY_PRICE_COLUMN = 'מחיר עלות'
 SHARES_COLUMN = 'כמות מניות'
@@ -225,397 +225,395 @@ def get_general_market_movers():
         return [], []
 
 def get_gemini_analysis(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
-    """
-    Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
-    **MODIFIED FOR HEBREW OUTPUT**
-    """
-    
-    if not GEMINI_API_KEY:
-        print("Gemini API key not found. Skipping AI analysis.")
-        return "<p><i>(AI analysis is not configured. Please add a GEMINI_API_KEY secret.)</i></p>"
+    """
+    Sends portfolio data to Gemini API for analysis and returns an HTML-formatted summary.
+    **MODIFIED FOR HEBREW OUTPUT**
+    """
+    
+    if not GEMINI_API_KEY:
+        print("Gemini API key not found. Skipping AI analysis.")
+        return "<p><i>(AI analysis is not configured. Please add a GEMINI_API_KEY secret.)</i></p>"
 
-    # 1. Create the prompt with portfolio and market data
-    prompt_data = f"My portfolio's total gain/loss for today is ₪{total_daily_p_l_ils:+.2f}.\n\nHere is my detailed portfolio data (in ILS):\n"
-    for item in portfolio_details:
-        prompt_data += (
-            f"- {item['ticker']} ({item['num_shares']} shares): "
-            f"Total P/L: {item['total_p_l']:+.2f}₪ ({item['total_change_pct']:.1f}%), "
-            f"Daily P/L: {item['daily_p_l']:+.2f}₪ ({item['daily_change_pct']:.1f}%)\n"
-        )
-    
-    prompt_data += "\nHere are today's top market gainers (Cap > 100M, Up > 5%):\n"
-    for item in general_market_gainers:
-        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
-    prompt_data += "\nHere are today's top market losers (Cap > 100M, Drop > 5%):\n"
-    for item in general_market_losers:
-        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
-    
-    # --- MODIFIED SYSTEM INSTRUCTION ---
-    system_instruction = (
-        "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data **in Hebrew**. "
-        "**Do NOT give financial advice, recommendations, or price predictions.** "
-        "Just summarize the key facts **in Hebrew**. "
-        "Start with a 1-sentence summary (in Hebrew) of the portfolio's total daily P/L (in ₪). "
-        "Then, add 1-2 sentences (in Hebrew) about specific portfolio stocks with significant movements (mentioning P/L ₪ amounts). "
-        "Finally, add a 1-sentence comment (in Hebrew) on the general market scan. "
-        "Keep the entire response to 3-4 sentences total, **all in Hebrew**."
-    )
-    # --- END OF MODIFICATION ---
+    # 1. Create the prompt with portfolio and market data
+    prompt_data = f"My portfolio's total gain/loss for today is ₪{total_daily_p_l_ils:+.2f}.\n\nHere is my detailed portfolio data (in ILS):\n"
+    for item in portfolio_details:
+        prompt_data += (
+            f"- {item['ticker']} ({item['num_shares']} shares): "
+            f"Total P/L: {item['total_p_l']:+.2f}₪ ({item['total_change_pct']:.1f}%), "
+            f"Daily P/L: {item['daily_p_l']:+.2f}₪ ({item['daily_change_pct']:.1f}%)\n"
+        )
+    
+    prompt_data += "\nHere are today's top market gainers (Cap > 100M, Up > 5%):\n"
+    for item in general_market_gainers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
+    prompt_data += "\nHere are today's top market losers (Cap > 100M, Drop > 5%):\n"
+    for item in general_market_losers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}%\n"
+    
+    # --- MODIFIED SYSTEM INSTRUCTION ---
+    system_instruction = (
+        "You are a financial analyst. Your task is to provide a brief, high-level summary of the provided data **in Hebrew**. "
+        "**Do NOT give financial advice, recommendations, or price predictions.** "
+        "Just summarize the key facts **in Hebrew**. "
+        "Start with a 1-sentence summary (in Hebrew) of the portfolio's total daily P/L (in ₪). "
+        "Then, add 1-2 sentences (in Hebrew) about specific portfolio stocks with significant movements (mentioning P/L ₪ amounts). "
+        "Finally, add a 1-sentence comment (in Hebrew) on the general market scan. "
+        "Keep the entire response to 3-4 sentences total, **all in Hebrew**."
+    )
+    # --- END OF MODIFICATION ---
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt_data}]
-        }],
-        "systemInstruction": {
-            "parts": [{"text": system_instruction}]
-        }
-    }
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_data}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        }
+    }
 
-    try:
-        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
-        response.raise_for_status() # Will raise an error for bad status codes
-        
-        result = response.json()
-        
-        if 'candidates' in result and result['candidates']:
-            text = result['candidates'][0]['content']['parts'][0]['text']
-            
-            # Perform the replace operation *before* the f-string
-            formatted_text = text.replace('\n', '<br>')
-            html_output = f"<p>{formatted_text}</p>"
-            
-            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>הבהרה:</b> סיכום זה נוצר על ידי AI והוא למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי.</p>"
-            return html_output
-        else:
-            print("Gemini API returned no candidates.")
-            return "<p><i>(AI analysis returned no response.)</i></p>"
+    try:
+        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
+        response.raise_for_status() # Will raise an error for bad status codes
+        
+        result = response.json()
+        
+        if 'candidates' in result and result['candidates']:
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Perform the replace operation *before* the f-string
+            formatted_text = text.replace('\n', '<br>')
+            html_output = f"<p>{formatted_text}</p>"
+            
+            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>הבהרה:</b> סיכום זה נוצר על ידי AI והוא למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי.</p>"
+            return html_output
+        else:
+            print("Gemini API returned no candidates.")
+            return "<p><i>(AI analysis returned no response.)</i></p>"
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error calling Gemini API: {e}")
-        return f"<p><i>(Error fetching AI analysis: {e})</i></p>"
-    except Exception as e:
-        print(f"Error processing Gemini response: {e}")
-        traceback.print_exc()
-        return "<p><i>(Error processing AI analysis.)</i></p>"
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Gemini API: {e}")
+        return f"<p><i>(Error fetching AI analysis: {e})</i></p>"
+    except Exception as e:
+        print(f"Error processing Gemini response: {e}")
+        traceback.print_exc()
+        return "<p><i>(Error processing AI analysis.)</i></p>"
 
 def get_gemini_insights(portfolio_details, general_market_losers, general_market_gainers, total_daily_p_l_ils):
-    """
-    Sends data to Gemini API for high-level insights.
-    **MODIFIED FOR HEBREW OUTPUT**
-    """
-    
-    if not GEMINI_API_KEY:
-        return "<p><i>(AI analysis is not configured.)</i></p>"
+    """
+    Sends data to Gemini API for high-level insights.
+    **MODIFIED FOR HEBREW OUTPUT**
+    """
+    
+    if not GEMINI_API_KEY:
+        return "<p><i>(AI analysis is not configured.)</i></p>"
 
-    # 1. Create the prompt data with English labels (data is data)
-    prompt_data = f"My portfolio's total daily P/L: ₪{total_daily_p_l_ils:+.2f}.\n\n"
-    prompt_data += "My portfolio details (in ILS):\n"
-    for item in portfolio_details:
-        prompt_data += (
-            f"- {item['ticker']} ({item['num_shares']} shares): "
-            f"Total P/L: ₪{item['total_p_l']:+.2f} ({item['total_change_pct']:.1f}%), "
-            f"Daily P/L: ₪{item['daily_p_l']:+.2f} ({item['daily_change_pct']:.1f}%)\n"
-        )
-    
-    prompt_data += "\nToday's Top Market Losers (Cap > 100M, Drop > 5%):\n"
-    for item in general_market_losers:
-        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (Market Cap: {item['Market Cap']})\n"
-    prompt_data += "\nToday's Top Market Gainers (Cap > 100M, Up > 5%):\n"
-    for item in general_market_gainers:
-        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (Market Cap: {item['Market Cap']})\n"
+    # 1. Create the prompt data with English labels (data is data)
+    prompt_data = f"My portfolio's total daily P/L: ₪{total_daily_p_l_ils:+.2f}.\n\n"
+    prompt_data += "My portfolio details (in ILS):\n"
+    for item in portfolio_details:
+        prompt_data += (
+            f"- {item['ticker']} ({item['num_shares']} shares): "
+            f"Total P/L: ₪{item['total_p_l']:+.2f} ({item['total_change_pct']:.1f}%), "
+            f"Daily P/L: ₪{item['daily_p_l']:+.2f} ({item['daily_change_pct']:.1f}%)\n"
+        )
+    
+    prompt_data += "\nToday's Top Market Losers (Cap > 100M, Drop > 5%):\n"
+    for item in general_market_losers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (Market Cap: {item['Market Cap']})\n"
+    prompt_data += "\nToday's Top Market Gainers (Cap > 100M, Up > 5%):\n"
+    for item in general_market_gainers:
+        prompt_data += f"- {item['Symbol']} ({item['Name']}): {item['% Change']:.1f}% (Market Cap: {item['Market Cap']})\n"
 
-    # 2. Create the System Instruction in **HEBREW**
-    
-    # --- MODIFIED SYSTEM INSTRUCTION ---
-    system_instruction = (
-        "You are a financial analyst. Your task is to identify interesting risks and opportunities in the provided data. "
-        "Your analysis is based on the provided price, P/L, and market cap data and You have access to news or fundamental data."
-        "\n\n"
-        "**Crucially: You must NOT give specific buy or sell recommendations (e.g., 'You should buy X' or 'You should sell Y').**"
-        "\n\n"
-        "Instead, provide 2-3 'points for thought' in **HEBREW**, as bullet points."
-        "Focus on: "
-        "1. Identifying a stock from the user's portfolio that had a sharp move (up or down) and what they should check about it (in Hebrew)."
-        "2. Identifying a stock from the 'Top Losers' list that might be an 'interesting opportunity for further research' (e.g., a large-cap stock with a sharp drop) (in Hebrew)."
-        "3. A general insight about the portfolio's performance relative to the market (in Hebrew)."
-        "\n\n"
-        "The response MUST be in **HEBREW**."
-    )
-    # --- END OF MODIFICATION ---
+    # 2. Create the System Instruction in **HEBREW**
+    
+    # --- MODIFIED SYSTEM INSTRUCTION ---
+    system_instruction = (
+        "You are a financial analyst. Your task is to identify interesting risks and opportunities in the provided data. "
+        "Your analysis is based on the provided price, P/L, and market cap data and You have access to news or fundamental data."
+        "\n\n"
+        "**Crucially: You must NOT give specific buy or sell recommendations (e.g., 'You should buy X' or 'You should sell Y').**"
+        "\n\n"
+        "Instead, provide 2-3 'points for thought' in **HEBREW**, as bullet points."
+        "Focus on: "
+        "1. Identifying a stock from the user's portfolio that had a sharp move (up or down) and what they should check about it (in Hebrew)."
+        "2. Identifying a stock from the 'Top Losers' list that might be an 'interesting opportunity for further research' (e.g., a large-cap stock with a sharp drop) (in Hebrew)."
+        "3. A general insight about the portfolio's performance relative to the market (in Hebrew)."
+        "\n\n"
+        "The response MUST be in **HEBREW**."
+    )
+    # --- END OF MODIFICATION ---
 
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt_data}]
-        }],
-        "systemInstruction": {
-            "parts": [{"text": system_instruction}]
-        }
-    }
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_data}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        }
+    }
 
-    try:
-        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
-        response.raise_for_status()
-        
-        result = response.json()
-        
-        if 'candidates' in result and result['candidates']:
-            text = result['candidates'][0]['content']['parts'][0]['text']
-            
-            # --- Formatting fix starts here ---
-            # 1. Convert Markdown bold (**text**) to HTML bold (<b>text</b>)
-            formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-            # ---------------------
-            
-            # 2. Convert Markdown bullets (*) to HTML list items (<li>)
-            # (Use the already-fixed formatted_text, not the original text)
-            formatted_text = formatted_text.replace('* ', '<li>')
-            
-            # Handle both \n and <br> from the model
-            formatted_text = re.sub(r'\n|<br>', '</li>', formatted_text)
-            
-            # Clean up potential empty list items
-            formatted_text = re.sub(r'<li>\s*</li>', '', formatted_text)
-            
-            # Ensure everything is wrapped in <ul>
-            if '<li>' in formatted_text:
-                if not formatted_text.endswith('</li>'):
-                        formatted_text += '</li>'
-                html_output = f"<ul>{formatted_text}</ul>"
-            else:
-                # Fallback if no list was created
-                html_output = f"<p>{formatted_text.replace('</li>', '<br>')}</p>"
-            
-            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>הבהרה:</b> ניתוח AI זה מיועד למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי. בצע מחקר משלך לפני קבלת החלטות.</p>"
-            return html_output
-        else:
-            print("Gemini API (Insights) returned no candidates.")
-            return "<p><i>(AI analysis returned no response.)</i></p>"
+    try:
+        response = requests.post(api_url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=20)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        if 'candidates' in result and result['candidates']:
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # --- Formatting fix starts here ---
+            # 1. Convert Markdown bold (**text**) to HTML bold (<b>text</b>)
+            formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+            # ---------------------
+            
+            # 2. Convert Markdown bullets (*) to HTML list items (<li>)
+            # (Use the already-fixed formatted_text, not the original text)
+            formatted_text = formatted_text.replace('* ', '<li>')
+            
+            # Handle both \n and <br> from the model
+            formatted_text = re.sub(r'\n|<br>', '</li>', formatted_text)
+            
+            # Clean up potential empty list items
+            formatted_text = re.sub(r'<li>\s*</li>', '', formatted_text)
+            
+            # Ensure everything is wrapped in <ul>
+            if '<li>' in formatted_text:
+                if not formatted_text.endswith('</li>'):
+                        formatted_text += '</li>'
+                html_output = f"<ul>{formatted_text}</ul>"
+            else:
+                # Fallback if no list was created
+                html_output = f"<p>{formatted_text.replace('</li>', '<br>')}</p>"
+            
+            html_output += "<p style='font-size: 0.7em; color: #666; font-style: italic;'><b>הבהרה:</b> ניתוח AI זה מיועד למטרות מידע בלבד ואינו מהווה ייעוץ פיננסי. בצע מחקר משלך לפני קבלת החלטות.</p>"
+            return html_output
+        else:
+            print("Gemini API (Insights) returned no candidates.")
+            return "<p><i>(AI analysis returned no response.)</i></p>"
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error calling Gemini API (Insights): {e}")
-        return f"<p><i>(Error fetching AI insights: {e})</i></p>"
-    except Exception as e:
-        print(f"Error processing Gemini (Insights) response: {e}")
-        traceback.print_exc()
-        return "<p><i>(Error processing AI insights.)</i></p>"
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Gemini API (Insights): {e}")
+        return f"<p><i>(Error fetching AI insights: {e})</i></p>"
+    except Exception as e:
+        print(f"Error processing Gemini (Insights) response: {e}")
+        traceback.print_exc()
+        return "<p><i>(Error processing AI insights.)</i></p>"
+
 
 
 def generate_html_report(portfolio_details, general_market_losers, general_market_gainers, gemini_analysis_html, gemini_insights_html, total_daily_p_l_ils):
-    """ 
-    Generates a complete HTML report string. 
-    **MODIFIED FOR HEBREW TITLES AND RTL AI SECTIONS**
-    """
-    today = datetime.now().strftime("%B %d, %Y")
-    
-    html = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 20px; direction: ltr; }}
-            h1 {{ color: #333; border-bottom: 2px solid #4CAF50; }}
-            h2 {{ color: #444; margin-top: 30px; }}
-            /* Style for the Total P/L summary */
-            .total-pl-summary {{
-                font-size: 1.5em;
-                font-weight: bold;
-                text-align: center;
-                margin: 20px 0;
-                padding: 15px;
-                border-radius: 8px;
-            }}
-            .total-pl-positive {{ background-color: #e6f7ec; color: #2a874d; }}
-            .total-pl-negative {{ background-color: #fdecea; color: #d9534f; }}
-            
-            table {{ border-collapse: collapse; width: 100%; margin-top: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-            th {{ background-color: #4CAF50; color: white; }}
-            tr:nth-child(even) {{ background-color: #f2f2f2; }}
-            tr:hover {{ background-color: #e9e9e9; }}
-            .positive {{ color: green; font-weight: bold; }}
-            .negative {{ color: red; font-weight: bold; }}
-            .neutral {{ color: #555; }}
-            .alert-section {{ background-color: #fff0f0; border: 2px solid #d9534f; padding: 15px; border-radius: 8px; margin-top: 20px; }}
-            .info-section {{ background-color: #f0f8ff; border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; margin-top: 20px; }}
-            .success-section {{ background-color: #f0fff4; border: 2px solid #48bb78; padding: 15px; border-radius: 8px; margin-top: 20px; }}
-            
-            /* --- MODIFIED Gemini Section Style --- */
-            .gemini-section {{ 
-                background-color: #fdf8e2; 
-                border: 2px solid #f0b90b; 
-                padding: 15px; 
-                border-radius: 8px; 
-                margin-top: 20px; 
-                direction: rtl; /* Added */
-                text-align: right; /* Added */
-            }}
-            .gemini-section h2 {{ margin-top: 0; color: #d98c00; }}
-            .gemini-section p {{ font-size: 1.1em; line-height: 1.6; }}
-            
-            /* --- MODIFIED Insights Section Style --- */
-            .insights-section {{
-                background-color: #f3f0ff;
-                border: 2px solid #6c48bb;
-                padding: 15px;
-                border-radius: 8px;
-                margin-top: 20px;
-                direction: rtl; /* Changed from ltr */
-                text-align: right; /* Changed from left */
-            }}
-            .insights-section h2 {{ margin-top: 0; color: #5a3e9b; }}
-            .insights-section ul {{ padding-left: 0; padding-right: 20px; }} /* Changed padding for RTL list */
-            .insights-section li {{ font-size: 1.1em; line-height: 1.6; margin-bottom: 10px; }}
-            
-            .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
-            .info-section h2 {{ margin-top: 0; color: #4a90e2; }}
-            .success-section h2 {{ margin-top: 0; color: #48bb78; }}
-        </style>
-    </head>
-    <body>
-                <h1 style="text-align: right; direction: rtl;">דוח מניות יומי - {today}</h1>
+    """ 
+    Generates a complete HTML report string. 
+    **MODIFIED FOR HEBREW TITLES AND RTL AI SECTIONS**
+    """
+    today = datetime.now().strftime("%B %d, %Y")
+    
+    html = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 20px; direction: ltr; }}
+            h1 {{ color: #333; border-bottom: 2px solid #4CAF50; }}
+            h2 {{ color: #444; margin-top: 30px; }}
+            /* Style for the Total P/L summary */
+            .total-pl-summary {{
+                font-size: 1.5em;
+                font-weight: bold;
+                text-align: center;
+                margin: 20px 0;
+                padding: 15px;
+                border-radius: 8px;
+            }}
+            .total-pl-positive {{ background-color: #e6f7ec; color: #2a874d; }}
+            .total-pl-negative {{ background-color: #fdecea; color: #d9534f; }}
+            
+            table {{ border-collapse: collapse; width: 100%; margin-top: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
+            th {{ background-color: #4CAF50; color: white; }}
+            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            tr:hover {{ background-color: #e9e9e9; }}
+            .positive {{ color: green; font-weight: bold; }}
+            .negative {{ color: red; font-weight: bold; }}
+            .neutral {{ color: #555; }}
+            .alert-section {{ background-color: #fff0f0; border: 2px solid #d9534f; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            .info-section {{ background-color: #f0f8ff; border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            .success-section {{ background-color: #f0fff4; border: 2px solid #48bb78; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            
+            /* --- MODIFIED Gemini Section Style --- */
+            .gemini-section {{ 
+                background-color: #fdf8e2; 
+                border: 2px solid #f0b90b; 
+                padding: 15px; 
+                border-radius: 8px; 
+                margin-top: 20px; 
+                direction: rtl; /* Added */
+                text-align: right; /* Added */
+            }}
+            .gemini-section h2 {{ margin-top: 0; color: #d98c00; }}
+            .gemini-section p {{ font-size: 1.1em; line-height: 1.6; }}
+            
+            /* --- MODIFIED Insights Section Style --- */
+            .insights-section {{
+                background-color: #f3f0ff;
+                border: 2px solid #6c48bb;
+                padding: 15px;
+                border-radius: 8px;
+                margin-top: 20px;
+                direction: rtl; /* Changed from ltr */
+                text-align: right; /* Changed from left */
+            }}
+            .insights-section h2 {{ margin-top: 0; color: #5a3e9b; }}
+            .insights-section ul {{ padding-left: 0; padding-right: 20px; }} /* Changed padding for RTL list */
+            .insights-section li {{ font-size: 1.1em; line-height: 1.6; margin-bottom: 10px; }}
+            
+            .alert-section h2 {{ margin-top: 0; color: #d9534f; }}
+            .info-section h2 {{ margin-top: 0; color: #4a90e2; }}
+            .success-section h2 {{ margin-top: 0; color: #48bb78; }}
+        </style>
+    </head>
+    <body>
+        <h1 style="text-align: right; direction: rtl;">דוח מניות יומי - {today}</h1>
 
-    <div class='gemini-section'>
-                <h2>🤖 סיכום פיננסי - AI</h2>
-        {gemini_analysis_html}
-    </div>
+    <div class='gemini-section'>
+        <h2>🤖 סיכום פיננסי - AI</h2>
+        {gemini_analysis_html}
+    </div>
 
-    <div class='insights-section'>
-                <h2>💡 תובנות אנליסט - AI</h2>
-        {gemini_insights_html}
-    </div>
-    """
-    
-    # Personal Alerts Section
-    total_drops = [s for s in portfolio_details if s['total_change_pct'] <= -30]
-    daily_drops_10 = [s for s in portfolio_details if s['daily_change_pct'] <= -10]
-    daily_drops_20 = [s for s in portfolio_details if s['daily_change_pct'] <= -20]
-    daily_gains_20 = [s for s in portfolio_details if s['daily_change_pct'] >= 20]
+    <div class='insights-section'>
+        <h2>💡 תובנות אנליסט - AI</h2>
+        {gemini_insights_html}
+    </div>
+    """
+    
+    # Personal Alerts Section
+    total_drops = [s for s in portfolio_details if s['total_change_pct'] <= -30]
+    daily_drops_10 = [s for s in portfolio_details if s['daily_change_pct'] <= -10]
+    daily_drops_20 = [s for s in portfolio_details if s['daily_change_pct'] <= -20]
+    daily_gains_20 = [s for s in portfolio_details if s['daily_change_pct'] >= 20]
 
-    if daily_gains_20:
-        html += "<div class='info-section'><h2>🚀 My Portfolio Movers (Up %)</h2>"
-        html += "<h3 style='color:green;'>Stocks Up More Than 20% Today</h3><table>"
-        html += "<tr><th>Stock</th><th>Daily Change</th></tr>"
-        for s in daily_gains_20:
-            html += f"<tr><td>{s['ticker']}</td><td class='positive'>{s['daily_change_pct']:.1f}%</td></tr>"
-        html += "</table></div>"
+    if daily_gains_20:
+        html += "<div class='info-section'><h2>🚀 My Portfolio Movers (Up %)</h2>"
+        html += "<h3 style='color:green;'>Stocks Up More Than 20% Today</h3><table>"
+        html += "<tr><th>Stock</th><th>Daily Change</th></tr>"
+        for s in daily_gains_20:
+            html += f"<tr><td>{s['ticker']}</td><td class='positive'>{s['daily_change_pct']:.1f}%</td></tr>"
+        html += "</table></div>"
 
-    if total_drops or daily_drops_10 or daily_drops_20:
-        html += "<div class='alert-section'><h2>🔻 My Portfolio Alerts & Drops</h2>"
-        
-        if total_drops:
-            html += "<h3 style='color:#d9534f;'>TOTAL DROP Over 30%</h3><table>"
-            html += "<tr><th>Stock</th><th>Buy Price</th><th>Current</th><th>Total Change</th></tr>"
-            for s in total_drops:
-                html += f"<tr><td>{s['ticker']}</td><td>{s['buy_price']:.2f}</td><td>{s['current_price']:.2f}</td><td class='negative'>{s['total_change_pct']:.1f}%</td></tr>"
-            html += "</table>"
-        if daily_drops_10:
-            html += "<h3 style='color:#d9534f;'>⚠️ DAILY DROP Over 10%</h3><table>"
-            html += "<tr><th>Stock</th><th>Yesterday</th><th>Current</th><th>Daily Change</th></tr>"
-            for s in daily_drops_10:
-                html += f"<tr><td>{s['ticker']}</td><td>{s['prev_close']:.2f}</td><td>{s['current_price']:.2f}</td><td class='negative'>{s['daily_change_pct']:.1f}%</td></tr>"
-            html += "</table>"
-        if daily_drops_20:
-            html += "<h3 style='color:#d9534f;'>Stocks Down More Than 20% Today</h3><table>"
-            html += "<tr><th>Stock</th><th>Daily Change</th></tr>"
-            for s in daily_drops_20:
-                html += f"<tr><td>{s['ticker']}</td><td class='negative'>{s['daily_change_pct']:.1f}%</td></tr>"
-            html += "</table>"
-            
-        html += "</div>"
-    
-    # General Market Gainers Section
-    if general_market_gainers:
-        html += "<div class='success-section'>"
-        html += "<h2>📈 General Market Scan - Top Gainers (Cap >100M, Up >5%)</h2>"
-        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
-        for stock in general_market_gainers:
-            html += f"""
-                <tr>
-                    <td>{stock['Symbol']}</td>
-                    <td>{stock['Name']}</td>
-                    <td class='positive'>{stock['% Change']:.2f}%</td>
-                    <td>{stock['Market Cap']}</td>
-                </tr>
-            """
-        html += "</table></div>"
-    
-    # General Market Losers Section
-    html += "<div class='alert-section'>"
-    html += "<h2>📉 General Market Scan - Top Losers (Cap >100M, Drop >5%)</h2>"
-    
-    if general_market_losers:
-        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
-        for stock in general_market_losers:
-            html += f"""
-                <tr>
-                    <td>{stock['Symbol']}</td>
-                    <td>{stock['Name']}</td>
-                    <td class='negative'>{stock['% Change']:.2f}%</td>
-                    <td>{stock['Market Cap']}</td>
-                </tr>
-            """
-        html += "</table>"
-    else:
-        html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 5%).</p>"
-    
-    html += "</div>"
+    if total_drops or daily_drops_10 or daily_drops_20:
+        html += "<div class='alert-section'><h2>🔻 My Portfolio Alerts & Drops</h2>"
+        
+        if total_drops:
+            html += "<h3 style='color:#d9534f;'>TOTAL DROP Over 30%</h3><table>"
+            html += "<tr><th>Stock</th><th>Buy Price</th><th>Current</th><th>Total Change</th></tr>"
+            for s in total_drops:
+                html += f"<tr><td>{s['ticker']}</td><td>{s['buy_price']:.2f}</td><td>{s['current_price']:.2f}</td><td class='negative'>{s['total_change_pct']:.1f}%</td></tr>"
+            html += "</table>"
+        if daily_drops_10:
+            html += "<h3 style='color:#d9534f;'>⚠️ DAILY DROP Over 10%</h3><table>"
+            html += "<tr><th>Stock</th><th>Yesterday</th><th>Current</th><th>Daily Change</th></tr>"
+            for s in daily_drops_10:
+                html += f"<tr><td>{s['ticker']}</td><td>{s['prev_close']:.2f}</td><td>{s['current_price']:.2f}</td><td class='negative'>{s['daily_change_pct']:.1f}%</td></tr>"
+            html += "</table>"
+        if daily_drops_20:
+            html += "<h3 style='color:#d9534f;'>Stocks Down More Than 20% Today</h3><table>"
+            html += "<tr><th>Stock</th><th>Daily Change</th></tr>"
+            for s in daily_drops_20:
+                html += f"<tr><td>{s['ticker']}</td><td class='negative'>{s['daily_change_pct']:.1f}%</td></tr>"
+            html += "</table>"
+            
+        html += "</div>"
+    
+    # General Market Gainers Section
+    if general_market_gainers:
+        html += "<div class='success-section'>"
+        html += "<h2>📈 General Market Scan - Top Gainers (Cap >100M, Up >5%)</h2>"
+        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
+        for stock in general_market_gainers:
+            html += f"""
+                <tr>
+                    <td>{stock['Symbol']}</td>
+                    <td>{stock['Name']}</td>
+                    <td class='positive'>{stock['% Change']:.2f}%</td>
+                    <td>{stock['Market Cap']}</td>
+                </tr>
+            """
+        html += "</table></div>"
+    
+    # General Market Losers Section
+    html += "<div class='alert-section'>"
+    html += "<h2>📉 General Market Scan - Top Losers (Cap >100M, Drop >5%)</h2>"
+    
+    if general_market_losers:
+        html += "<table><tr><th>Stock</th><th>Name</th><th>Daily Change</th><th>Market Cap</th></tr>"
+        for stock in general_market_losers:
+            html += f"""
+                <tr>
+                    <td>{stock['Symbol']}</td>
+                    <td>{stock['Name']}</td>
+                    <td class='negative'>{stock['% Change']:.2f}%</td>
+                    <td>{stock['Market Cap']}</td>
+                </tr>
+            """
+        html += "</table>"
+    else:
+        html += "<p>No stocks found matching the criteria (Market Cap > 100M and Daily Drop > 5%).</p>"
+    
+    html += "</div>"
 
-    # My Portfolio Summary
-    html += "<h2>My Portfolio Summary</h2>"
-    
-    # Total Daily P/L Summary (in ILS ₪)
-    total_pl_class = "total-pl-positive" if total_daily_p_l_ils >= 0 else "total-pl-negative"
-    html += f"""
-    <div class='total-pl-summary {total_pl_class}'>
-        Today's Portfolio P/L: {total_daily_p_l_ils:+.2f}₪
-    </div>
-    """
+    # My Portfolio Summary
+    html += "<h2>My Portfolio Summary</h2>"
+    
+    # Total Daily P/L Summary (in ILS ₪)
+    total_pl_class = "total-pl-positive" if total_daily_p_l_ils >= 0 else "total-pl-negative"
+    html += f"""
+    <div class='total-pl-summary {total_pl_class}'>
+        Today's Portfolio P/L: {total_daily_p_l_ils:+.2f}₪
+    </div>
+    """
 
-    html += """
-        <table>
-            <tr>
-                <th>Stock</th>
-                <th>Shares</th>
-                <th>Buy Price</th>
-                <th>Current Price</th>
-                <th>Daily P/L (₪)</th>
-                <th>Daily Change (%)</th>
-                <th>Total P/L (₪)</th>
-                <th>Total Change (%)</th>
-            </tr>
-    """
+    html += """
+        <table>
+            <tr>
+                <th>Stock</th>
+                <th>Shares</th>
+                <th>Buy Price</th>
+                <th>Current Price</th>
+                <th>Daily P/L (₪)</th>
+                <th>Daily Change (%)</th>
+                <th>Total P/L (₪)</th>
+                <th>Total Change (%)</th>
+            </tr>
+    """
 
-    # Portfolio Summary Table (in ILS ₪)
-    for stock in portfolio_details:
-        daily_cls = "positive" if stock['daily_change_pct'] > 0 else ("negative" if stock['daily_change_pct'] < 0 else "neutral")
-        total_cls = "positive" if stock['total_change_pct'] > 0 else ("negative" if stock['total_change_pct'] < 0 else "neutral")
-        
-        html += f"""
-            <tr>
-                <td>{stock['ticker']}</td>
-                <td>{stock['num_shares']}</td>
-                <td>{stock['buy_price']:.2f}</td>
-                <td>{stock['current_price']:.2f}</td>
-                <td class='{daily_cls}'>₪{stock['daily_p_l']:+.2f}</td>
-                <td class='{daily_cls}'>{stock['daily_change_pct']:+.2f}%</td>
-                <td class='{total_cls}'>₪{stock['total_p_l']:+.2f}</td>
-                <td class='{total_cls}'>{stock['total_change_pct']:+.2f}%</td>
-            </tr>
-        """
-    
-  D  html += "</table>"
-    html += "</body></html>"
-    return html
+    # Portfolio Summary Table (in ILS ₪)
+    for stock in portfolio_details:
+        daily_cls = "positive" if stock['daily_change_pct'] > 0 else ("negative" if stock['daily_change_pct'] < 0 else "neutral")
+        total_cls = "positive" if stock['total_change_pct'] > 0 else ("negative" if stock['total_change_pct'] < 0 else "neutral")
+        
+        html += f"""
+            <tr>
+                <td>{stock['ticker']}</td>
+                <td>{stock['num_shares']}</td>
+                <td>{stock['buy_price']:.2f}</td>
+                <td>{stock['current_price']:.2f}</td>
+                <td class='{daily_cls}'>₪{stock['daily_p_l']:+.2f}</td>
+                <td class='{daily_cls}'>{stock['daily_change_pct']:+.2f}%</td>
+                <td class='{total_cls}'>₪{stock['total_p_l']:+.2f}</td>
+                <td class='{total_cls}'>{stock['total_change_pct']:+.2f}%</td>
+            </tr>
+        """
+    
+    html += "</table>"
+    html += "</body></html>"
+    return html
 
 def send_email(html_body):
-    """ 
-    Sends an email with the given HTML body. 
-    **MODIFIED FOR HEBREW SUBJECT**
-    """
+    """ Sends an email with the given HTML body. """
     if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
         print("Error: Email credentials (GMAIL_USER, GMAIL_PASSWORD, RECIPIENT_EMAIL) not set in environment variables.")
         return
@@ -623,8 +621,7 @@ def send_email(html_body):
     today = datetime.now().strftime("%Y-%m-%d")
     msg = MIMEMultipart("alternative")
     
-    # --- MODIFIED Subject Line ---
-    msg["Subject"] = f"📈 דוח מניות יומי (כולל סיכום AI ותובנות) - {today}"
+    msg["Subject"] = f"📈 Daily Stock Report (with AI Summary & Insights) - {today}"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
     
@@ -729,7 +726,7 @@ def check_portfolio_and_report():
                             current_price = latest_prices
                             prev_close = prev_prices
                         else:
-            C                 current_price = latest_prices.get(ticker)
+                            current_price = latest_prices.get(ticker)
                             prev_close = prev_prices.get(ticker)
 
                         if current_price is None or prev_close is None or pd.isna(current_price) or pd.isna(prev_close):
@@ -751,7 +748,7 @@ def check_portfolio_and_report():
                         
                         # Standard % Calculations
                         total_change_pct = (total_change_per_share / buy_price) * 100 if buy_price != 0 else 0
-e                           daily_change_pct = (daily_change_per_share / prev_close) * 100 if prev_close != 0 else 0
+                        daily_change_pct = (daily_change_per_share / prev_close) * 100 if prev_close != 0 else 0
 
                         details = {
                             "ticker": ticker,
@@ -772,7 +769,7 @@ e                           daily_change_pct = (daily_change_per_sh
                               f"Total P/L=₪{total_p_l_ils:+.2f} ({total_change_pct:+.1f}%)")
                     except KeyError:
                         print(f"Warning: No data found for ticker '{ticker}' in downloaded batch. It might be delisted or invalid.")
-s                   except Exception as e:
+                    except Exception as e:
                         print(f"Error processing {ticker}: {e}")
                         traceback.print_exc()
         except Exception as e:
